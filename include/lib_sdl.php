@@ -64,64 +64,135 @@
 		$risk_rating = $input["risk_rating"]["value"];
 		$jiraEpicId = $input["jiraepic"]["value"];
 		$list_of_modules = $input["list_of_modules"];
+		$spec_link = $input["spec"]["value"];
+		$PR_link = $input["code_location"]["value"];
+		$risk_assessment = $input["riskassessment"]["response"];
+		error_log(print_r($list_of_modules, true));
 
+		# -- JIRA -- 
+		# Check if the given issue is an EPIC or non-EPIC
+		$isEpic = _sdl_check_jira_type($jiraEpicId);
 
-		#Check Trello or Jira
-		if (strtolower(getenv('TRELLO')) === 'true'){
-			# -- Trello -- 
- 
-			#Get Trello information
-			$trello_team = $input["trello_team"]["value"];
-		    $trello_key = $input["trello_key"];
-		    $trello_token = $input["trello_token"];
-
-			$board = _sdl_generate_trello_board($user, $project_name, $risk_rating, $list_of_modules);
-			$created = null;
-			try {
-			  $created = _sdl_trello_board_create($board, $trello_token, $trello_key, $trello_team);
-			} catch (Exception $e){
-			  print_r($e);
-			  $created = -1;
-			}
-			if ($created == -1){
-			   return array(
-					"ok" => false,
-					"status" => 200,
-				);
-			} else {
-			   $trellolink = "https://trello.com/b/" . $created;
-
-			   return array(
-					"ok" => true,
-					"status" => 200,
-					"name" => "SDL: ".$project_name,
-					"link" => $trellolink,
-				);
-			}
+		# Create checklist ticket
+		$ret = _sdl_create_jira_story_ticket($jiraEpicId, $risk_rating, $list_of_modules, $project_name, $isEpic);
+		// error_log(print_r($ret, true));
+		if (! $ret['ok']){ return $ret;
 		}else{
-			# -- JIRA -- 
-			# Check if the given issue is an EPIC or non-EPIC
-			$isEpic = _sdl_check_jira_type($jiraEpicId);
-
-			# Create checklist ticket
-			$ret = _sdl_create_jira_checklist_ticket($jiraEpicId, $risk_rating, $list_of_modules, $project_name, $isEpic);
-			if (! $ret['ok']){ return $ret;
-			}else{
-				$jiraChecklist = $ret["response"];
-				$ret = _sdl_populate_checklist($ret["response"], $risk_rating);
-			}
-
-			# Create ticket for seurity team
-			$ret = _sdl_create_jira_ticket_prodsec($input, $jiraChecklist["key"]);
-			if (! $ret['ok']) return $ret;
-
-			return array(
-				"ok" => true,
-				"status" => 200,
-				"name" => "SDL: ".$project_name,
-				"link" => getenv('JIRA_URL') . "/browse/". $jiraChecklist["key"],
-			);
+			$jiraChecklist = $ret["response"];
+			$ret = _sdl_create_subtasks($jiraChecklist, $risk_rating, $project_name);
+			// error_log(print_r($ret, true));
 		}
+
+		# Create ticket for security team
+		// $ret = _sdl_create_jira_sec_ticket($input, $jiraChecklist["key"]);
+		// if (! $ret['ok']) return $ret;
+
+		return array(
+			"ok" => true,
+			"status" => 200,
+			"name" => "SDL: ".$project_name,
+			"link" => getenv('JIRA_URL') . "/browse/". $jiraChecklist["key"],
+		);
+
+
+
+
+		// // create story
+		// $data = array(
+		// 	'fields' => array(
+		// 		'project' => array(
+		// 			'key' => getenv('JIRA_PROJECT'),
+		// 		),
+		// 		'summary' => 'goSDL - '. $project_name,
+		// 		'description' => 'this is another test description',
+		// 		"issuetype" => array(
+		// 			"name" => 'Story',
+		// 		),
+		// 	),
+		// );
+
+		// $ret = jira_new_issue_create($data);
+		// if (! $ret['ok']) return $ret;
+		// error_log(print_r($ret['body'], true));
+
+		// // create subtask
+		// $data = array(
+		// 	'fields' => array(
+		// 		'project' => array(
+		// 			'key' => getenv('JIRA_PROJECT'),
+		// 		),
+		// 		'parent' => array(
+		// 			'key' => $ret['body']['key'],
+		// 		),
+		// 		'summary' => 'Subtask of '. $ret['body']['key'],
+		// 		'description' => 'A new subtask',
+		// 		'issuetype' => array(
+		// 			'id' => '5'
+		// 		),
+		// 	),
+		// );
+
+		// $ret = jira_new_issue_create($data);
+		// if (! $ret['ok']) return $ret;
+		// error_log(print_r($ret['body'], true));
+
+
+		// #Check Trello or Jira
+		// if (strtolower(getenv('TRELLO')) === 'true'){
+		// 	# -- Trello -- 
+ 
+		// 	#Get Trello information
+		// 	$trello_team = $input["trello_team"]["value"];
+		//     $trello_key = $input["trello_key"];
+		//     $trello_token = $input["trello_token"];
+
+		// 	$board = _sdl_generate_trello_board($user, $project_name, $risk_rating, $list_of_modules);
+		// 	$created = null;
+		// 	try {
+		// 	  $created = _sdl_trello_board_create($board, $trello_token, $trello_key, $trello_team);
+		// 	} catch (Exception $e){
+		// 	  print_r($e);
+		// 	  $created = -1;
+		// 	}
+		// 	if ($created == -1){
+		// 	   return array(
+		// 			"ok" => false,
+		// 			"status" => 200,
+		// 		);
+		// 	} else {
+		// 	   $trellolink = "https://trello.com/b/" . $created;
+
+		// 	   return array(
+		// 			"ok" => true,
+		// 			"status" => 200,
+		// 			"name" => "SDL: ".$project_name,
+		// 			"link" => $trellolink,
+		// 		);
+		// 	}
+		// }else{
+		// 	# -- JIRA -- 
+		// 	# Check if the given issue is an EPIC or non-EPIC
+		// 	$isEpic = _sdl_check_jira_type($jiraEpicId);
+
+		// 	# Create checklist ticket
+		// 	$ret = _sdl_create_jira_checklist_ticket($jiraEpicId, $risk_rating, $list_of_modules, $project_name, $isEpic);
+		// 	if (! $ret['ok']){ return $ret;
+		// 	}else{
+		// 		$jiraChecklist = $ret["response"];
+		// 		$ret = _sdl_populate_checklist($ret["response"], $risk_rating);
+		// 	}
+
+		// 	# Create ticket for seurity team
+		// 	$ret = _sdl_create_jira_ticket_prodsec($input, $jiraChecklist["key"]);
+		// 	if (! $ret['ok']) return $ret;
+
+		// 	return array(
+		// 		"ok" => true,
+		// 		"status" => 200,
+		// 		"name" => "SDL: ".$project_name,
+		// 		"link" => getenv('JIRA_URL') . "/browse/". $jiraChecklist["key"],
+		// 	);
+		// }
 	}
 
 	#
@@ -184,21 +255,38 @@
 		return false;
 	}
 
-
 	#
-	# Function to create SDL checklist jira ticket
+	# Function to create SDL story jira ticket
 	#
-	function _sdl_create_jira_checklist_ticket($epicId, $risk_rating, $list_of_modules, $project_name, $isEpic){
+	function _sdl_create_jira_story_ticket($epicId, $risk_rating, $list_of_modules, $project_name, $isEpic){
 
 		$project_risk = _sdl_determineRiskValue($risk_rating);
 
 
 		$our_modules = array_intersect(_sdl_valid_choosable_modules(), $list_of_modules);
 		$lists = array();
+		error_log(print_r($our_modules, true));
+
+		// add parent modules to our_modules if they are ommitted but their submodules are present
+		$parent_modules = array();
+		foreach ($our_modules as $module){
+			if (!in_array($module, _sdl_valid_modules())){
+				foreach (_sdl_valid_modules() as $valid_module){
+					if (strpos($module, $valid_module) !== false){
+						if (!in_array($valid_module, $our_modules) && !in_array($valid_module, $parent_modules))
+						$parent_modules[] = $valid_module;
+						break;
+					}
+				}
+			}
+		}
+		foreach ($parent_modules as $module){
+			$our_modules[] = $module;
+		}
 
 		foreach ($our_modules as $filename){
 			if (!in_array($filename, _sdl_valid_modules())){
-				continue; //skip for the submodule identifiers
+				continue;
 			}
 			$parsed = json_decode(file_get_contents($filename), true);
 			$category = (isset($parsed['category'])) ? $parsed['category'] : "General";
@@ -215,6 +303,7 @@
 			$submodules = array();
 
 			if (isset($parsed['submodules'])){
+				error_log(print_r('submodules is set', true));
 				foreach ($parsed['submodules'] as $submod){
 					$infoobj2 = array(
 					"filename" => $filename.md5($filename.$submod['title']),
@@ -224,26 +313,36 @@
 					"lists" => _sdl_get_lists_from_sdl($submod['questions']),
 					);
 
+					error_log(print_r($infoobj2, true));
+
 					if (in_array($infoobj2['filename'], $our_modules)){
 						$submodules[] = $infoobj2;
+						error_log(print_r('adding submodule', true));
+					}
+					else {
+						error_log(print_r('not adding submodule', true));
 					}
 				}
 			}
+			error_log(print_r('filename: ' . $filename, true));
 
 			$lists[$category][] = $infoobj;
 			foreach ($submodules as $submod){
 				$lists[$category][] = $submod;
+				error_log(print_r('submod: ' . $submod, true));
 			}
 		}
+
+		error_log(print_r($lists, true));
 
 		#
 		#  Normal Editor
 		#  
 		$category_html = '{panel:title=(on) Instruction|bgColor=#FFFFCE}
-		Please complete the above checklist in the "*SDL*" tabs.
-		Mark the items to complete the checklist. Once all of the cheklist is completed then move this ticket\'s status to "*Done*" and enter resolution "*Done*" 
-		If you end up over-scoping and have too many checklist, and you end up not needing it, you can mark the item as "*Not Applicable*" by putting the "*N/A*" status to the checklist items.
-		If you have question completing a specific checklist, feel free to reach out to security team for any help or pointers.
+		Please complete the checklist items in the subtasks referenced by this Story.
+		Once all of the cheklist items for all subtasks are completed, move this ticket\'s status to "*Done*" and enter resolution "*Done*" 
+		If you end up over-scoping and have too many checklist items, and you end up not needing it, you can identify the item as "*Not Applicable*" in the subtask\'s comments.
+		If you have questions, feel free to reach out to security team for any help or pointers.
 
 		Your initial risk assessment questionnaire came back with a rating of *'. $risk_rating .'*.
 		Due to this risk rating, you must complete the items that are tagged with a star (*).
@@ -274,34 +373,47 @@
 			$category_html = $category_html . $card_html;
 		}
 
-		if ($isEpic){
+		// if ($isEpic){
 
-			$data = array(
-				'fields' => array(
-					'project' => array(
-						'key' => getenv('JIRA_PROJECT'),
-					),
-					'summary' => 'SDL Checklist - ' . $project_name,
-					'description' => $category_html,
-					"issuetype" => array(
-						"name" => 'SDL Checklist',
-					),
+		// 	$data = array(
+		// 		'fields' => array(
+		// 			'project' => array(
+		// 				'key' => getenv('JIRA_PROJECT'),
+		// 			),
+		// 			'summary' => 'SDL Checklist - ' . $project_name,
+		// 			'description' => $category_html,
+		// 			"issuetype" => array(
+		// 				"name" => 'SDL Checklist',
+		// 			),
+		// 		),
+		// 	);
+		// }else{
+		// 	$data = array(
+		// 		'fields' => array(
+		// 			'project' => array(
+		// 				'key' => getenv('JIRA_PROJECT'),
+		// 			),
+		// 			'summary' => 'SDL Checklist - '. $project_name,
+		// 			'description' => $category_html,
+		// 			"issuetype" => array(
+		// 				"name" => 'SDL Checklist',
+		// 			),
+		// 		),
+		// 	);
+		// }
+
+		$data = array(
+			'fields' => array(
+				'project' => array(
+					'key' => getenv('JIRA_PROJECT'),
 				),
-			);
-		}else{
-			$data = array(
-				'fields' => array(
-					'project' => array(
-						'key' => getenv('JIRA_PROJECT'),
-					),
-					'summary' => 'SDL Checklist - '. $project_name,
-					'description' => $category_html,
-					"issuetype" => array(
-						"name" => 'SDL Checklist',
-					),
+				'summary' => 'SDL Checklist - ' . $project_name,
+				'description' => $category_html,
+				"issuetype" => array(
+					"name" => 'Story',
 				),
-			);
-		}
+			),
+		);
 
 		$ret = jira_new_issue_create($data);
 		if (! $ret['ok']) return $ret;
@@ -313,6 +425,136 @@
 			"response" => $response,
 		);
 	}
+
+
+	// #
+	// # Function to create SDL checklist jira ticket
+	// #
+	// function _sdl_create_jira_checklist_ticket($epicId, $risk_rating, $list_of_modules, $project_name, $isEpic){
+
+	// 	$project_risk = _sdl_determineRiskValue($risk_rating);
+
+
+	// 	$our_modules = array_intersect(_sdl_valid_choosable_modules(), $list_of_modules);
+	// 	$lists = array();
+
+	// 	foreach ($our_modules as $filename){
+	// 		if (!in_array($filename, _sdl_valid_modules())){
+	// 			continue; //skip for the submodule identifiers
+	// 		}
+	// 		$parsed = json_decode(file_get_contents($filename), true);
+	// 		$category = (isset($parsed['category'])) ? $parsed['category'] : "General";
+	// 		if (!isset($lists[$category])){
+	// 			$lists[$category] = array();
+	// 		}
+
+	// 		$infoobj = array(
+	// 			"title" => $parsed['title'],
+	// 			"description" => $parsed['description'],
+	// 			"minimum_risk_required" => $parsed['minimum_risk_required'],
+	// 			"lists" => _sdl_get_lists_from_sdl($parsed['questions']),
+	// 		);
+	// 		$submodules = array();
+
+	// 		if (isset($parsed['submodules'])){
+	// 			foreach ($parsed['submodules'] as $submod){
+	// 				$infoobj2 = array(
+	// 				"filename" => $filename.md5($filename.$submod['title']),
+	// 				"title" => $submod['title'],
+	// 				"description" => $submod['description'],
+	// 				"minimum_risk_required" => $submod['minimum_risk_required'],
+	// 				"lists" => _sdl_get_lists_from_sdl($submod['questions']),
+	// 				);
+
+	// 				if (in_array($infoobj2['filename'], $our_modules)){
+	// 					$submodules[] = $infoobj2;
+	// 				}
+	// 			}
+	// 		}
+
+	// 		$lists[$category][] = $infoobj;
+	// 		foreach ($submodules as $submod){
+	// 			$lists[$category][] = $submod;
+	// 		}
+	// 	}
+
+	// 	#
+	// 	#  Normal Editor
+	// 	#  
+	// 	$category_html = '{panel:title=(on) Instruction|bgColor=#FFFFCE}
+	// 	Please complete the above checklist in the "*SDL*" tabs.
+	// 	Mark the items to complete the checklist. Once all of the cheklist is completed then move this ticket\'s status to "*Done*" and enter resolution "*Done*" 
+	// 	If you end up over-scoping and have too many checklist, and you end up not needing it, you can mark the item as "*Not Applicable*" by putting the "*N/A*" status to the checklist items.
+	// 	If you have question completing a specific checklist, feel free to reach out to security team for any help or pointers.
+
+	// 	Your initial risk assessment questionnaire came back with a rating of *'. $risk_rating .'*.
+	// 	Due to this risk rating, you must complete the items that are tagged with a star (*).
+	// 	{panel}
+
+	// 	h1. Component Selected'. "\n";
+	// 	# Create HTML
+	// 	foreach ($lists as $category => $cards){
+	// 		$category_html = $category_html . '*' . $category . '*';
+	// 		$category_html = $category_html . "\n";
+
+	// 		$card_html = "";
+	// 		foreach ($cards as $card){
+	// 			# Add label to cards depeding on risk level
+	// 			if (isset($card["minimum_risk_required"])){
+	// 			$card_risk = _sdl_determineRiskValue($card["minimum_risk_required"]);
+
+	// 				if ($project_risk >= $card_risk){
+	// 					$card_html = $card_html . '* *' . $card['title'] . '* (*)' . "\n";
+	// 				}else{
+	// 					$card_html = $card_html . '* *' . $card['title'] . '*' . "\n";
+	// 				}
+	// 			}
+
+	// 			$card_html = $card_html . $card['description'] . "\n\n";
+	// 		}
+
+	// 		$category_html = $category_html . $card_html;
+	// 	}
+
+	// 	if ($isEpic){
+
+	// 		$data = array(
+	// 			'fields' => array(
+	// 				'project' => array(
+	// 					'key' => getenv('JIRA_PROJECT'),
+	// 				),
+	// 				'summary' => 'SDL Checklist - ' . $project_name,
+	// 				'description' => $category_html,
+	// 				"issuetype" => array(
+	// 					"name" => 'SDL Checklist',
+	// 				),
+	// 			),
+	// 		);
+	// 	}else{
+	// 		$data = array(
+	// 			'fields' => array(
+	// 				'project' => array(
+	// 					'key' => getenv('JIRA_PROJECT'),
+	// 				),
+	// 				'summary' => 'SDL Checklist - '. $project_name,
+	// 				'description' => $category_html,
+	// 				"issuetype" => array(
+	// 					"name" => 'SDL Checklist',
+	// 				),
+	// 			),
+	// 		);
+	// 	}
+
+	// 	$ret = jira_new_issue_create($data);
+	// 	if (! $ret['ok']) return $ret;
+	// 	$response = $ret['body'];
+	// 	$response["list"] = $lists;
+
+	// 	return  array(
+	// 		"ok" => true,
+	// 		"response" => $response,
+	// 	);
+	// }
 
 
 	#
@@ -353,19 +595,25 @@
 		return $lists;
 	}
 
-
 	#
-	# Populate the checklist item with the selected questions
+	# Create jira subtasks for the selected questions
 	#
-	function _sdl_populate_checklist($jiraChecklist, $risk_rating){
+	function _sdl_create_subtasks($jiraChecklist, $risk_rating, $project_name){
 
 		$issue_id = $jiraChecklist["id"];
+		$parent_story = $jiraChecklist["key"];
 		$lists = $jiraChecklist["list"];
 		$project_risk = _sdl_determineRiskValue($risk_rating);
 
 		foreach ($lists as $category => $cards){
 			$customfield_id = _sdl_getCustomfield($category);
 			$checklist_items=array();
+
+			// create subtask description
+			$description = "Please complete the following checklist items related to the '" . $category . "' component of your project. 
+			Once all of the cheklist items for this subtask are completed, move this ticket\'s status to "*Done*" and enter resolution "*Done*"
+			If any item is determined to be unnecessary, please record the reasoning for this decision as a comment on this subtask.
+			If you have questions, feel free to reach out to security team for any help or pointers.\n\n";
 
 			foreach ($cards as $card){
 				//Add label to cards depeding on risk level
@@ -376,18 +624,44 @@
 				if (isset($card['lists'])){
 					foreach ($card['lists'] as $questiongroup => $questionlist){
 						foreach ($questionlist as $questioncheckbox){
+							$item = "";
 							if ($project_risk >= $card_risk){
-								$checklist_items[] = '**' . $card['title'] . '** (*) - '. $questioncheckbox;
+								$item = '*' . $card['title'] . '* (*) - '. $questioncheckbox;
 							}else{
-								$checklist_items[] = '**' . $card['title'] . '** - '. $questioncheckbox;
+								$item = '*' . $card['title'] . '* - '. $questioncheckbox;
 							}
+							$checklist_items[] = $item;
+							$description = $description . $item . "\n";
 						}
 					}
 				}
+
+				$description = $description . "\n";
 			}
 
-			# Call REST API
-			$ret = jira_new_issue_add_checklistitem($issue_id, $customfield_id, $checklist_items);
+			// error_log(print_r($description, true));
+
+			// create subtask
+			$data = array(
+				'fields' => array(
+					'project' => array(
+						'key' => getenv('JIRA_PROJECT'),
+					),
+					'parent' => array(
+						'key' => $parent_story,
+					),
+					'summary' => 'SDL checklist - ' . $project_name . ': ' . $category . ' component',
+					'description' => $description,
+					'issuetype' => array(
+						'id' => '5'
+					),
+				),
+			);
+
+			// $ret = jira_new_issue_add_checklistitem($issue_id, $customfield_id, $checklist_items);
+			// if (! $ret['ok']) return $ret;
+			$ret = jira_new_issue_create($data);
+			// error_log(print_r($ret, true));
 			if (! $ret['ok']) return $ret;
 
 		}
@@ -396,6 +670,49 @@
 			"ok" => true,
 		);
 	}
+
+	// #
+	// # Populate the checklist item with the selected questions
+	// #
+	// function _sdl_populate_checklist($jiraChecklist, $risk_rating){
+
+	// 	$issue_id = $jiraChecklist["id"];
+	// 	$lists = $jiraChecklist["list"];
+	// 	$project_risk = _sdl_determineRiskValue($risk_rating);
+
+	// 	foreach ($lists as $category => $cards){
+	// 		$customfield_id = _sdl_getCustomfield($category);
+	// 		$checklist_items=array();
+
+	// 		foreach ($cards as $card){
+	// 			//Add label to cards depeding on risk level
+	// 			if (isset($card["minimum_risk_required"])){
+	// 				$card_risk = _sdl_determineRiskValue($card["minimum_risk_required"]);
+	// 			}
+
+	// 			if (isset($card['lists'])){
+	// 				foreach ($card['lists'] as $questiongroup => $questionlist){
+	// 					foreach ($questionlist as $questioncheckbox){
+	// 						if ($project_risk >= $card_risk){
+	// 							$checklist_items[] = '**' . $card['title'] . '** (*) - '. $questioncheckbox;
+	// 						}else{
+	// 							$checklist_items[] = '**' . $card['title'] . '** - '. $questioncheckbox;
+	// 						}
+	// 					}
+	// 				}
+	// 			}
+	// 		}
+
+	// 		# Call REST API
+	// 		$ret = jira_new_issue_add_checklistitem($issue_id, $customfield_id, $checklist_items);
+	// 		if (! $ret['ok']) return $ret;
+
+	// 	}
+
+	// 	return array(
+	// 		"ok" => true,
+	// 	);
+	// }
 
 	#
 	# Get Custom Fields ID
@@ -430,9 +747,9 @@
 	}
 
 	#
-	# Function to create jira ticket using the jira API for Prodsec team to review the SDL process
+	# Function to create jira ticket using the jira API for Sec team to review the SDL process
 	#
-	function _sdl_create_jira_ticket_prodsec($input, $jiraChecklistId){
+	function _sdl_create_jira_sec_ticket($input, $jiraChecklistId){
 		$project_name = $input["project_name"]["value"];
 		$risk_rating = $input["risk_rating"]["value"];
 
@@ -493,8 +810,74 @@
 			"ok" => true,
 			"response" => $response,
 		);
-
 	}
+
+	// #
+	// # Function to create jira ticket using the jira API for Prodsec team to review the SDL process
+	// #
+	// function _sdl_create_jira_ticket_prodsec($input, $jiraChecklistId){
+	// 	$project_name = $input["project_name"]["value"];
+	// 	$risk_rating = $input["risk_rating"]["value"];
+
+	// 	# Create text info blob for jira
+	// 	$info_blob = "Information Gathering \n";
+	// 	$info_blob = $info_blob . "========================== \n";
+
+	// 	foreach ($input as $key=>$value){
+	// 		if (is_array($value) && isset($value["value"])){
+	// 			if ($value["text"] != "Trello Team"){
+	// 				$info_blob = $info_blob . $value["text"] . " : " . $value["value"] . "\n";
+	// 			}
+	// 		}
+	// 	}
+
+	// 	$selected_tags = "Selected Components: ";
+	// 	for ($i = 0; $i < count($input["tags"]); ++$i){
+	// 		if ($i == 0){
+	// 			$selected_tags = $selected_tags . $input["tags"][$i];
+	// 		}else{
+	// 			$selected_tags = $selected_tags . ", " . $input["tags"][$i];
+	// 		}
+	// 	}
+
+	// 	$info_blob = $info_blob . $selected_tags . " \n" ;
+
+	// 	$info_blob = $info_blob . "\nRisk Assessment Responses \n";
+	// 	$info_blob = $info_blob . "========================== \n";
+	// 	foreach ($input["riskassessment"] as $value){
+	// 		$info_blob = $info_blob . $value["text"] . " \n" . $value["response"] . "\n\n";
+	// 	}
+
+	// 	$data = array(
+	// 		'fields' => array(
+	// 			'project' => array(
+	// 				'key' => 'PRODSEC',
+	// 			),
+	// 			'labels' => array('sdl'),
+	// 			'components' => array(
+	// 				array(
+	// 					'name' => 'Identification',
+	// 				),
+	// 			),
+	// 			'summary' => $risk_rating. ': Review: ' . $project_name,
+	// 			'description' => "Review for {$project_name}\nJIRA SDL Checklist at : {$jiraChecklistId}\n\n{$info_blob}",
+	// 			"issuetype" => array(
+	// 				"name" => 'Task',
+	// 			),
+	// 		),
+	// 	);
+
+	// 	$ret = jira_new_issue_create($data);
+	// 	if (! $ret['ok']) return $ret;
+
+	// 	$response = $ret['body'];
+
+	// 	return  array(
+	// 		"ok" => true,
+	// 		"response" => $response,
+	// 	);
+
+	// }
 
 
 	/**
